@@ -1,4 +1,4 @@
-//
+﻿//
 // Game.h
 //
 
@@ -10,8 +10,7 @@
 #include <memory>
 
 
-// A basic game implementation that creates a D3D12 device and
-// provides a game loop.
+// D3D12 デバイスを作成し、ゲームループを提供する基本的なゲーム実装。
 class Game final : public DX::IDeviceNotify
 {
 public:
@@ -25,17 +24,17 @@ public:
 	Game(Game const&) = delete;
 	Game& operator= (Game const&) = delete;
 
-	// Initialization and management
+	// 初期化と管理
 	void Initialize(HWND window, int width, int height);
 
-	// Basic game loop
+	// 基本的なゲームループ
 	void Tick();
 
-	// IDeviceNotify
+	// IDeviceNotify の実装
 	void OnDeviceLost() override;
 	void OnDeviceRestored() override;
 
-	// Messages
+	// メッセージ
 	void OnActivated();
 	void OnDeactivated();
 	void OnSuspending();
@@ -44,7 +43,7 @@ public:
 	void OnDisplayChange();
 	void OnWindowSizeChanged(int width, int height);
 
-	// Properties
+	// プロパティ
 	void GetDefaultSize(int& width, int& height) const noexcept;
 
 private:
@@ -57,13 +56,13 @@ private:
 	void CreateDeviceDependentResources();
 	void CreateWindowSizeDependentResources();
 
-	// Device resources.
+	// デバイスに依存するリソース。
 	std::unique_ptr<DX::DeviceResources>        m_deviceResources;
 
-	// Rendering loop timer.
+	// レンダリングループ用タイマー。
 	DX::StepTimer                               m_timer;
 
-	// If using the DirectX Tool Kit for DX12, uncomment this line:
+	// DX12 用 DirectX Tool Kit を使用している場合はこの行のコメントを外してください:
 	// std::unique_ptr<DirectX::GraphicsMemory> m_graphicsMemory;
 
 	struct Vertex
@@ -72,7 +71,7 @@ private:
 		DirectX::XMFLOAT4 color;
 	};
 
-	// App resources.
+	// アプリのリソース。
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_vertexBuffer;
 	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> m_pipelineState;

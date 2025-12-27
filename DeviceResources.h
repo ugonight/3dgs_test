@@ -1,12 +1,12 @@
-//
-// DeviceResources.h - A wrapper for the Direct3D 12 device and swapchain
+﻿//
+// DeviceResources.h - Direct3D 12 デバイスとスワップチェーンのラッパー
 //
 
 #pragma once
 
 namespace DX
 {
-    // Provides an interface for an application that owns DeviceResources to be notified of the device being lost or created.
+    // DeviceResources を所有するアプリケーションが、デバイスの喪失や再作成を通知されるためのインターフェイスを提供します。
     interface IDeviceNotify
     {
         virtual void OnDeviceLost() = 0;
@@ -16,7 +16,7 @@ namespace DX
         ~IDeviceNotify() = default;
     };
 
-    // Controls all the DirectX device resources.
+    // DirectX のデバイスリソース全体を管理します。
     class DeviceResources
     {
     public:

@@ -1,4 +1,4 @@
-//
+﻿//
 // Game.cpp
 //
 
@@ -16,10 +16,10 @@ using Microsoft::WRL::ComPtr;
 Game::Game() noexcept(false)
 {
 	m_deviceResources = std::make_unique<DX::DeviceResources>();
-	// TODO: Provide parameters for swapchain format, depth/stencil format, and backbuffer count.
-	//   Add DX::DeviceResources::c_AllowTearing to opt-in to variable rate displays.
-	//   Add DX::DeviceResources::c_EnableHDR for HDR10 display.
-	//   Add DX::DeviceResources::c_ReverseDepth to optimize depth buffer clears for 0 instead of 1.
+	// TODO: スワップチェーンのフォーマット、深度/ステンシルのフォーマット、バックバッファ数のパラメータを指定してください。
+	//   DX::DeviceResources::c_AllowTearing を追加して可変レートディスプレイを有効にします。
+	//   HDR10 表示のために DX::DeviceResources::c_EnableHDR を追加します。
+	//   深度バッファのクリアを 1 ではなく 0 に最適化するために DX::DeviceResources::c_ReverseDepth を追加します。
 	m_deviceResources->RegisterDeviceNotify(this);
 }
 
@@ -31,7 +31,7 @@ Game::~Game()
 	}
 }
 
-// Initialize the Direct3D resources required to run.
+// 実行に必要な Direct3D リソースを初期化します。
 void Game::Initialize(HWND window, int width, int height)
 {
 	m_deviceResources->SetWindow(window, width, height);
@@ -42,8 +42,8 @@ void Game::Initialize(HWND window, int width, int height)
 	m_deviceResources->CreateWindowSizeDependentResources();
 	CreateWindowSizeDependentResources();
 
-	// TODO: Change the timer settings if you want something other than the default variable timestep mode.
-	// e.g. for 60 FPS fixed timestep update logic, call:
+	// TODO: デフォルトの可変タイムステップモード以外を使用する場合はタイマー設定を変更してください。
+	// 例: 60 FPS の固定タイムステップ更新ロジックの場合:
 	/*
 	m_timer.SetFixedTimeStep(true);
 	m_timer.SetTargetElapsedSeconds(1.0 / 60);
@@ -51,7 +51,7 @@ void Game::Initialize(HWND window, int width, int height)
 }
 
 #pragma region Frame Update
-// Executes the basic game loop.
+// 基本的なゲームループを実行します。
 void Game::Tick()
 {
 	m_timer.Tick([&]()
@@ -62,14 +62,14 @@ void Game::Tick()
 	Render();
 }
 
-// Updates the world.
+// ワールドを更新します。
 void Game::Update(DX::StepTimer const& timer)
 {
 	PIXBeginEvent(PIX_COLOR_DEFAULT, L"Update");
 
 	float elapsedTime = float(timer.GetElapsedSeconds());
 
-	// TODO: Add your game logic here.
+	// TODO: ここにゲームロジックを追加してください。
 	elapsedTime;
 
 	PIXEndEvent();
@@ -77,44 +77,44 @@ void Game::Update(DX::StepTimer const& timer)
 #pragma endregion
 
 #pragma region Frame Render
-// Draws the scene.
+// シーンを描画します。
 void Game::Render()
 {
-	// Don't try to render anything before the first Update.
+	// 最初の Update の前に描画しようとしないでください。
 	if (m_timer.GetFrameCount() == 0)
 	{
 		return;
 	}
 
-	// Prepare the command list to render a new frame.
+	// 新しいフレームを描画するためにコマンドリストを準備します。
 	m_deviceResources->Prepare();
 	Clear();
 
 	auto commandList = m_deviceResources->GetCommandList();
 	PIXBeginEvent(commandList, PIX_COLOR_DEFAULT, L"Render");
 
-	// TODO: Add your rendering code here.
+	// TODO: ここにレンダリングコードを追加してください。
 	PopulateCommandList();
 
 	PIXEndEvent(commandList);
 
-	// Show the new frame.
+	// 新しいフレームを表示します。
 	PIXBeginEvent(m_deviceResources->GetCommandQueue(), PIX_COLOR_DEFAULT, L"Present");
 	m_deviceResources->Present();
 
-	// If using the DirectX Tool Kit for DX12, uncomment this line:
+	// DX12 の DirectX Tool Kit を使用している場合はこの行のコメントを外してください:
 	// m_graphicsMemory->Commit(m_deviceResources->GetCommandQueue());
 
 	PIXEndEvent(m_deviceResources->GetCommandQueue());
 }
 
-// Helper method to clear the back buffers.
+// バックバッファをクリアするヘルパー関数。
 void Game::Clear()
 {
 	auto commandList = m_deviceResources->GetCommandList();
 	PIXBeginEvent(commandList, PIX_COLOR_DEFAULT, L"Clear");
 
-	// Clear the views.
+	// ビューをクリアします。
 	const auto rtvDescriptor = m_deviceResources->GetRenderTargetView();
 	const auto dsvDescriptor = m_deviceResources->GetDepthStencilView();
 
@@ -122,7 +122,7 @@ void Game::Clear()
 	commandList->ClearRenderTargetView(rtvDescriptor, Colors::CornflowerBlue, 0, nullptr);
 	commandList->ClearDepthStencilView(dsvDescriptor, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-	// Set the viewport and scissor rect.
+	// ビューポートとシザー矩形を設定します。
 	const auto viewport = m_deviceResources->GetScreenViewport();
 	const auto scissorRect = m_deviceResources->GetScissorRect();
 	commandList->RSSetViewports(1, &viewport);
@@ -133,27 +133,27 @@ void Game::Clear()
 #pragma endregion
 
 #pragma region Message Handlers
-// Message handlers
+// メッセージハンドラ
 void Game::OnActivated()
 {
-	// TODO: Game is becoming active window.
+	// TODO: ゲームがアクティブなウィンドウになります。
 }
 
 void Game::OnDeactivated()
 {
-	// TODO: Game is becoming background window.
+	// TODO: ゲームがバックグラウンドウィンドウになります。
 }
 
 void Game::OnSuspending()
 {
-	// TODO: Game is being power-suspended (or minimized).
+	// TODO: ゲームが電源サスペンドされる（または最小化される）際の処理。
 }
 
 void Game::OnResuming()
 {
 	m_timer.ResetElapsedTime();
 
-	// TODO: Game is being power-resumed (or returning from minimize).
+	// TODO: ゲームが電源復帰（または最小化から復帰）する際の処理。
 }
 
 void Game::OnWindowMoved()
@@ -174,25 +174,25 @@ void Game::OnWindowSizeChanged(int width, int height)
 
 	CreateWindowSizeDependentResources();
 
-	// TODO: Game window is being resized.
+	// TODO: ゲームウィンドウがリサイズされています。
 }
 
 // Properties
 void Game::GetDefaultSize(int& width, int& height) const noexcept
 {
-	// TODO: Change to desired default window size (note minimum size is 320x200).
+	// TODO: デフォルトのウィンドウサイズを変更してください（最小サイズは 320x200）。
 	width = 800;
 	height = 600;
 }
 #pragma endregion
 
 #pragma region Direct3D Resources
-// These are the resources that depend on the device.
+// これらはデバイスに依存するリソースです。
 void Game::CreateDeviceDependentResources()
 {
 	auto device = m_deviceResources->GetD3DDevice();
 
-	// Check Shader Model 6 support
+	// シェーダーモデル6のサポートを確認します
 	D3D12_FEATURE_DATA_SHADER_MODEL shaderModel = { D3D_SHADER_MODEL_6_0 };
 	if (FAILED(device->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &shaderModel, sizeof(shaderModel)))
 		|| (shaderModel.HighestShaderModel < D3D_SHADER_MODEL_6_0))
@@ -203,24 +203,24 @@ void Game::CreateDeviceDependentResources()
 		throw std::runtime_error("Shader Model 6.0 is not supported!");
 	}
 
-	// If using the DirectX Tool Kit for DX12, uncomment this line:
+	// DX12 の DirectX Tool Kit を使用している場合はこの行のコメントを外してください:
 	// m_graphicsMemory = std::make_unique<GraphicsMemory>(device);
 
-	// TODO: Initialize device dependent objects here (independent of window size).
+	// TODO: ここでウィンドウサイズに依存しないデバイス依存オブジェクトを初期化してください。
 	LoadAssets();
 }
 
-// Allocate all memory resources that change on a window SizeChanged event.
+// ウィンドウの SizeChanged イベントで変更されるすべてのメモリリソースを割り当てます。
 void Game::CreateWindowSizeDependentResources()
 {
-	// TODO: Initialize windows-size dependent objects here.
+	// TODO: ここでウィンドウサイズ依存のオブジェクトを初期化してください。
 }
 
 void Game::OnDeviceLost()
 {
-	// TODO: Add Direct3D resource cleanup here.
+	// TODO: ここで Direct3D リソースのクリーンアップを行ってください。
 
-	// If using the DirectX Tool Kit for DX12, uncomment this line:
+	// DX12 の DirectX Tool Kit を使用している場合はこの行のコメントを外してください:
 	// m_graphicsMemory.reset();
 }
 
@@ -236,7 +236,7 @@ void Game::LoadAssets()
 {
 	auto device = m_deviceResources->GetD3DDevice();
 
-	// Create an empty root signature.
+	// 空のルートシグネチャを作成します。
 	{
 		CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc;
 		rootSignatureDesc.Init(0, nullptr, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
@@ -247,13 +247,13 @@ void Game::LoadAssets()
 		DX::ThrowIfFailed(device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&m_rootSignature)));
 	}
 
-	// Create the pipeline state, which includes compiling and loading shaders.
+	// パイプラインステートを作成します（シェーダーのコンパイルと読み込みを含む）。
 	{
 		ComPtr<ID3DBlob> vertexShader;
 		ComPtr<ID3DBlob> pixelShader;
 
 #if defined(_DEBUG)
-		// Enable better shader debugging with the graphics debugging tools.
+		// グラフィックスデバッグツールでシェーダーデバッグを強化します。
 		UINT compileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
 #else
 		UINT compileFlags = 0;
@@ -262,14 +262,14 @@ void Game::LoadAssets()
 		DX::ThrowIfFailed(D3DCompileFromFile(L"shaders.hlsl", nullptr, nullptr, "VSMain", "vs_5_0", compileFlags, 0, &vertexShader, nullptr));
 		DX::ThrowIfFailed(D3DCompileFromFile(L"shaders.hlsl", nullptr, nullptr, "PSMain", "ps_5_0", compileFlags, 0, &pixelShader, nullptr));
 
-		// Define the vertex input layout.
+		// 頂点入力レイアウトを定義します。
 		D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
 		{
 			{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
 			{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
 		};
 
-		// Describe and create the graphics pipeline state object (PSO).
+		// グラフィックスパイプラインステートオブジェクト（PSO）を記述して作成します。
 		D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
 		psoDesc.InputLayout = { inputElementDescs, _countof(inputElementDescs) };
 		psoDesc.pRootSignature = m_rootSignature.Get();
@@ -287,24 +287,25 @@ void Game::LoadAssets()
 		DX::ThrowIfFailed(device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineState)));
 	}
 
-	// Create the vertex buffer.
+	// 頂点バッファを作成します。
 	{
-		// Define the geometry for a triangle.
+		// 三角形のジオメトリを定義します。
 		auto output_rect = m_deviceResources->GetOutputSize();
 		auto aspect_ratio = static_cast<float>(output_rect.right - output_rect.left) / static_cast<float>(output_rect.bottom - output_rect.top);
+		// クリップ座標をそのまま指定します（左手系、Y 上方向）。
 		Vertex triangleVertices[] =
 		{
-			{ { 0.0f, 0.25f * aspect_ratio, 0.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } },
-			{ { 0.25f, -0.25f * aspect_ratio, 0.0f }, { 0.0f, 1.0f, 0.0f, 1.0f } },
-			{ { -0.25f, -0.25f * aspect_ratio, 0.0f }, { 0.0f, 0.0f, 1.0f, 1.0f } }
+			{ { 0.0f, 0.25f * aspect_ratio, 0.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } }, // 上頂点 (赤)
+			{ { 0.25f, -0.25f * aspect_ratio, 0.0f }, { 0.0f, 1.0f, 0.0f, 1.0f } }, // 右下頂点 (緑)
+			{ { -0.25f, -0.25f * aspect_ratio, 0.0f }, { 0.0f, 0.0f, 1.0f, 1.0f } } // 左下頂点 (青)
 		};
 
 		const UINT vertexBufferSize = sizeof(triangleVertices);
 
-		// Note: using upload heaps to transfer static data like vert buffers is not 
-		// recommended. Every time the GPU needs it, the upload heap will be marshalled 
-		// over. Please read up on Default Heap usage. An upload heap is used here for 
-		// code simplicity and because there are very few verts to actually transfer.
+		// 注: 頂点バッファのような静的データ転送にアップロードヒープを使用することは推奨されません。
+		// GPU が必要とするたびに、アップロードヒープがマージされます。
+		// Default Heap の使用方法を参照してください。
+		// このサンプルではコードの簡潔さと転送する頂点数が非常に少ないため、アップロードヒープを使用しています。
 		auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
 		auto resourceDesc = CD3DX12_RESOURCE_DESC::Buffer(vertexBufferSize);
 		DX::ThrowIfFailed(device->CreateCommittedResource(
@@ -315,14 +316,14 @@ void Game::LoadAssets()
 			nullptr,
 			IID_PPV_ARGS(&m_vertexBuffer)));
 
-		// Copy the triangle data to the vertex buffer.
+		// 三角形データを頂点バッファにコピーします。
 		UINT8* pVertexDataBegin;
-		CD3DX12_RANGE readRange(0, 0);        // We do not intend to read from this resource on the CPU.
+		CD3DX12_RANGE readRange(0, 0);        // このリソースを CPU から読み取る意図はありません。
 		DX::ThrowIfFailed(m_vertexBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pVertexDataBegin)));
 		memcpy(pVertexDataBegin, triangleVertices, sizeof(triangleVertices));
 		m_vertexBuffer->Unmap(0, nullptr);
 
-		// Initialize the vertex buffer view.
+		// 頂点バッファビューを初期化します。
 		m_vertexBufferView.BufferLocation = m_vertexBuffer->GetGPUVirtualAddress();
 		m_vertexBufferView.StrideInBytes = sizeof(Vertex);
 		m_vertexBufferView.SizeInBytes = vertexBufferSize;
@@ -332,11 +333,11 @@ void Game::LoadAssets()
 void Game::PopulateCommandList()
 {
 	auto commandList = m_deviceResources->GetCommandList();
-	// Set necessary state.
+	// 必要な状態を設定します。
 	commandList->SetPipelineState(m_pipelineState.Get());
 	commandList->SetGraphicsRootSignature(m_rootSignature.Get());
 	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
-	// Draw the triangle.
+	// 三角形を描画します。
 	commandList->DrawInstanced(3, 1, 0, 0);
 }
