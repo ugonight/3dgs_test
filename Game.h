@@ -6,6 +6,7 @@
 
 #include "DeviceResources.h"
 #include "StepTimer.h"
+#include "SimpleCamera.h"
 
 #include <memory>
 
@@ -42,6 +43,8 @@ public:
 	void OnWindowMoved();
 	void OnDisplayChange();
 	void OnWindowSizeChanged(int width, int height);
+	void OnKeyDown(UINT8 key);
+	void OnKeyUp(UINT8 key);
 
 	// プロパティ
 	void GetDefaultSize(int& width, int& height) const noexcept;
@@ -71,12 +74,30 @@ private:
 		DirectX::XMFLOAT4 color;
 	};
 
-	// アプリのリソース。
-	Microsoft::WRL::ComPtr<ID3D12Resource> m_vertexBuffer;
-	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
-	Microsoft::WRL::ComPtr<ID3D12PipelineState> m_pipelineState;
+	struct SceneConstantBuffer
+	{
+		XMFLOAT4X4 mvp;        // Model-view-projection (MVP) matrix.
+		FLOAT padding[48];
+	};
+	
+	// Pipeline objects.
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> m_rootSignature;
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> m_pipelineState;
+	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> m_cbvSrvHeap;
 
+	// App resources.
+	UINT m_numIndices;
+	Microsoft::WRL::ComPtr<ID3D12Resource> m_vertexBuffer;
+	Microsoft::WRL::ComPtr<ID3D12Resource> m_indexBuffer;
+	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
+	D3D12_INDEX_BUFFER_VIEW m_indexBufferView;
+
+	Microsoft::WRL::ComPtr<ID3D12Resource> m_cbvUploadHeap;
+	SceneConstantBuffer* m_pConstantBuffers;
+	UINT m_cbvSrvDescriptorSize;
+	SimpleCamera m_camera;
+
+	void LoadPipeline();
 	void LoadAssets();
 	void PopulateCommandList();
 

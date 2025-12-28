@@ -27,6 +27,8 @@ add_executable(${PROJECT_NAME} WIN32
     Main.cpp
     StepTimer.h
     pch.h
+    SimpleCamera.cpp
+    SimpleCamera.h
 )
 
 if(NOT MINGW)
