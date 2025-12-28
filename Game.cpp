@@ -83,6 +83,18 @@ void Game::Update(DX::StepTimer const& timer)
 			XMMatrixTranslation(0, 0, 0);
 		XMStoreFloat4x4(&mvp, XMMatrixTranspose(model * m_camera.GetViewMatrix() * m_camera.GetProjectionMatrix(0.8f, aspectRatio)));
 		m_pConstantBuffers->mvp = mvp;
+
+		// 法線変換用の逆転置行列（HLSL 側の mul(vector, g_invModel) と整合）
+		m_pConstantBuffers->invModel = XMMatrixTranspose(XMMatrixInverse(nullptr, model));
+
+		// ワールド空間のライト方向（必要であればノーマライズして渡しておく）
+		const XMFLOAT3 lightDir = XMFLOAT3(0.5f, 0.7f, 0.5f);
+		// 正規化して書き込むとシェーダー側での扱いが安定します。
+		XMVECTOR ld = XMVector3Normalize(XMLoadFloat3(&lightDir));
+		XMStoreFloat3(&m_pConstantBuffers->lightDir, ld);
+
+		// アンビエント項（0..1）
+		m_pConstantBuffers->ambient = 0.15f;
 	}
 
 	PIXEndEvent();
@@ -292,7 +304,7 @@ void Game::LoadAssets()
 		CD3DX12_DESCRIPTOR_RANGE1 ranges[1];
 		ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
 		CD3DX12_ROOT_PARAMETER1 rootParameters[1];
-		rootParameters[0].InitAsDescriptorTable(1, &ranges[0], D3D12_SHADER_VISIBILITY_VERTEX);
+		rootParameters[0].InitAsDescriptorTable(1, &ranges[0], D3D12_SHADER_VISIBILITY_ALL);
 
 		CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc;
 		rootSignatureDesc.Init_1_1(_countof(rootParameters), rootParameters, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
@@ -321,8 +333,9 @@ void Game::LoadAssets()
 		// 頂点入力レイアウトを定義します。
 		D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
 		{
-			{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-			{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
+			{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0,  D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+			{ "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+			{ "NORMAL",   0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 28, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
 		};
 
 		CD3DX12_RASTERIZER_DESC rasterizerStateDesc(D3D12_DEFAULT);
@@ -359,14 +372,41 @@ void Game::LoadAssets()
 	{
 		Vertex cubeVertices[] =
 		{
-			{ { -0.5f, 0.0, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
-			{ { 0.5f, 0.0, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
-			{ { -0.5f, 1.0, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
-			{ { 0.5f, 1.0, 0.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
-			{ { -0.5f, 0.0, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
-			{ { 0.5f, 0.0, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
-			{ { -0.5f, 1.0, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
-			{ { 0.5f, 1.0, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
+			// 前面 (法線 -Z)
+			{ { -0.5f, 0.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, 0.0f, -1.0f } },
+			{ {  0.5f, 0.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, 0.0f, -1.0f } },
+			{ {  0.5f, 1.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, 0.0f, -1.0f } },
+			{ { -0.5f, 1.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, 0.0f, -1.0f } },
+
+			// 背面 (法線 +Z)
+			{ { -0.5f, 0.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, 0.0f, 1.0f } },
+			{ { -0.5f, 1.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, 0.0f, 1.0f } },
+			{ {  0.5f, 1.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, 0.0f, 1.0f } },
+			{ {  0.5f, 0.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, 0.0f, 1.0f } },
+
+			// 上面 (法線 +Y)
+			{ { -0.5f, 1.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, 1.0f, 0.0f } },
+			{ { -0.5f, 1.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, 1.0f, 0.0f } },
+			{ {  0.5f, 1.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, 1.0f, 0.0f } },
+			{ {  0.5f, 1.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, 1.0f, 0.0f } },
+
+			// 底面 (法線 -Y)
+			{ { -0.5f, 0.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, -1.0f, 0.0f } },
+			{ {  0.5f, 0.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, -1.0f, 0.0f } },
+			{ {  0.5f, 0.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, -1.0f, 0.0f } },
+			{ { -0.5f, 0.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, -1.0f, 0.0f } },
+
+			// 右側面 (法線 +X)
+			{ {  0.5f, 1.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 1.0f, 0.0f, 0.0f } },
+			{ {  0.5f, 0.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 1.0f, 0.0f, 0.0f } },
+			{ {  0.5f, 0.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 1.0f, 0.0f, 0.0f } },
+			{ {  0.5f, 1.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 1.0f, 0.0f, 0.0f } },
+
+			// 左側面 (法線 -X)
+			{ { -0.5f, 0.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f }, { -1.0f, 0.0f, 0.0f } },
+			{ { -0.5f, 0.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f }, { -1.0f, 0.0f, 0.0f } },
+			{ { -0.5f, 1.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f }, { -1.0f, 0.0f, 0.0f } },
+			{ { -0.5f, 1.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f }, { -1.0f, 0.0f, 0.0f } },
 		};
 
 		const UINT vertexBufferSize = sizeof(cubeVertices);
@@ -410,12 +450,12 @@ void Game::LoadAssets()
 	{
 		uint16_t cubeIndices[] =
 		{
-			0,1,2, 2,1,3,
-			4,6,5, 5,6,7,
-			4,5,0, 0,5,1,
-			2,3,6, 6,3,7,
-			0,2,4, 4,2,6,
-			1,5,3, 3,5,7
+			0,1,2, 0,2,3, // 前面
+			4,5,6, 4,6,7, // 背面
+			8,9,10, 8,10,11, // 上面
+			12,14,13, 12,15,14, // 底面
+			16,17,18, 16,18,19, // 右側面
+			20,21,22, 20,22,23 // 左側面
 		};
 		const UINT indexBufferSize = sizeof(cubeIndices);
 

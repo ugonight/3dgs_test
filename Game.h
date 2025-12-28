@@ -72,14 +72,18 @@ private:
 	{
 		DirectX::XMFLOAT3 position;
 		DirectX::XMFLOAT4 color;
+		DirectX::XMFLOAT3 normal;
 	};
 
 	struct SceneConstantBuffer
 	{
 		XMFLOAT4X4 mvp;        // Model-view-projection (MVP) matrix.
-		FLOAT padding[48];
+		XMMATRIX invModel;  // Inverse model matrix.
+		XMFLOAT3 lightDir; // Directional light direction.
+		float ambient; // Ambient light intensity.
+		FLOAT padding[27];
 	};
-	
+
 	// Pipeline objects.
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> m_rootSignature;
 	Microsoft::WRL::ComPtr<ID3D12PipelineState> m_pipelineState;
