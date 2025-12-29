@@ -83,18 +83,6 @@ void Game::Update(DX::StepTimer const& timer)
 			XMMatrixTranslation(0, 0, 0);
 		XMStoreFloat4x4(&mvp, XMMatrixTranspose(model * m_camera.GetViewMatrix() * m_camera.GetProjectionMatrix(0.8f, aspectRatio)));
 		m_pConstantBuffers->mvp = mvp;
-
-		// 法線変換用の逆転置行列（HLSL 側の mul(vector, g_invModel) と整合）
-		m_pConstantBuffers->invModel = XMMatrixTranspose(XMMatrixInverse(nullptr, model));
-
-		// ワールド空間のライト方向（必要であればノーマライズして渡しておく）
-		const XMFLOAT3 lightDir = XMFLOAT3(0.5f, 0.7f, 0.5f);
-		// 正規化して書き込むとシェーダー側での扱いが安定します。
-		XMVECTOR ld = XMVector3Normalize(XMLoadFloat3(&lightDir));
-		XMStoreFloat3(&m_pConstantBuffers->lightDir, ld);
-
-		// アンビエント項（0..1）
-		m_pConstantBuffers->ambient = 0.15f;
 	}
 
 	PIXEndEvent();
@@ -144,7 +132,7 @@ void Game::Clear()
 	const auto dsvDescriptor = m_deviceResources->GetDepthStencilView();
 
 	commandList->OMSetRenderTargets(1, &rtvDescriptor, FALSE, &dsvDescriptor);
-	commandList->ClearRenderTargetView(rtvDescriptor, Colors::CornflowerBlue, 0, nullptr);
+	commandList->ClearRenderTargetView(rtvDescriptor, XMVECTORF32{ 0.1f,0.1f,0.1f,1.0f }, 0, nullptr);
 	commandList->ClearDepthStencilView(dsvDescriptor, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
 	// ビューポートとシザー矩形を設定します。
@@ -335,7 +323,6 @@ void Game::LoadAssets()
 		{
 			{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0,  D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
 			{ "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-			{ "NORMAL",   0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 28, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
 		};
 
 		CD3DX12_RASTERIZER_DESC rasterizerStateDesc(D3D12_DEFAULT);
@@ -351,7 +338,7 @@ void Game::LoadAssets()
 		psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
 		psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
 		psoDesc.SampleMask = UINT_MAX;
-		psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+		psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
 		psoDesc.NumRenderTargets = 1;
 		psoDesc.RTVFormats[0] = m_deviceResources->GetBackBufferFormat();
 		psoDesc.DSVFormat = m_deviceResources->GetDepthBufferFormat();
@@ -373,40 +360,40 @@ void Game::LoadAssets()
 		Vertex cubeVertices[] =
 		{
 			// 前面 (法線 -Z)
-			{ { -0.5f, 0.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, 0.0f, -1.0f } },
-			{ {  0.5f, 0.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, 0.0f, -1.0f } },
-			{ {  0.5f, 1.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, 0.0f, -1.0f } },
-			{ { -0.5f, 1.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, 0.0f, -1.0f } },
+			{ { -0.5f, 0.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f } },
+			{ {  0.5f, 0.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f } },
+			{ {  0.5f, 1.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f } },
+			{ { -0.5f, 1.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f } },
 
 			// 背面 (法線 +Z)
-			{ { -0.5f, 0.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, 0.0f, 1.0f } },
-			{ { -0.5f, 1.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, 0.0f, 1.0f } },
-			{ {  0.5f, 1.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, 0.0f, 1.0f } },
-			{ {  0.5f, 0.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, 0.0f, 1.0f } },
+			{ { -0.5f, 0.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f } },
+			{ { -0.5f, 1.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f } },
+			{ {  0.5f, 1.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f } },
+			{ {  0.5f, 0.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f } },
 
 			// 上面 (法線 +Y)
-			{ { -0.5f, 1.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, 1.0f, 0.0f } },
-			{ { -0.5f, 1.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, 1.0f, 0.0f } },
-			{ {  0.5f, 1.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, 1.0f, 0.0f } },
-			{ {  0.5f, 1.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, 1.0f, 0.0f } },
+			{ { -0.5f, 1.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f } },
+			{ { -0.5f, 1.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f } },
+			{ {  0.5f, 1.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f } },
+			{ {  0.5f, 1.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f } },
 
 			// 底面 (法線 -Y)
-			{ { -0.5f, 0.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, -1.0f, 0.0f } },
-			{ {  0.5f, 0.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, -1.0f, 0.0f } },
-			{ {  0.5f, 0.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, -1.0f, 0.0f } },
-			{ { -0.5f, 0.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 0.0f, -1.0f, 0.0f } },
+			{ { -0.5f, 0.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f } },
+			{ {  0.5f, 0.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f } },
+			{ {  0.5f, 0.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f } },
+			{ { -0.5f, 0.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f } },
 
 			// 右側面 (法線 +X)
-			{ {  0.5f, 1.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 1.0f, 0.0f, 0.0f } },
-			{ {  0.5f, 0.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 1.0f, 0.0f, 0.0f } },
-			{ {  0.5f, 0.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 1.0f, 0.0f, 0.0f } },
-			{ {  0.5f, 1.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f }, { 1.0f, 0.0f, 0.0f } },
+			{ {  0.5f, 1.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f } },
+			{ {  0.5f, 0.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f } },
+			{ {  0.5f, 0.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f } },
+			{ {  0.5f, 1.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f } },
 
 			// 左側面 (法線 -X)
-			{ { -0.5f, 0.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f }, { -1.0f, 0.0f, 0.0f } },
-			{ { -0.5f, 0.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f }, { -1.0f, 0.0f, 0.0f } },
-			{ { -0.5f, 1.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f }, { -1.0f, 0.0f, 0.0f } },
-			{ { -0.5f, 1.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f }, { -1.0f, 0.0f, 0.0f } },
+			{ { -0.5f, 0.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f } },
+			{ { -0.5f, 0.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f } },
+			{ { -0.5f, 1.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f } },
+			{ { -0.5f, 1.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f } },
 		};
 
 		const UINT vertexBufferSize = sizeof(cubeVertices);
@@ -444,56 +431,6 @@ void Game::LoadAssets()
 		m_vertexBufferView.BufferLocation = m_vertexBuffer->GetGPUVirtualAddress();
 		m_vertexBufferView.StrideInBytes = sizeof(Vertex);
 		m_vertexBufferView.SizeInBytes = vertexBufferSize;
-	}
-
-	// インデックスバッファを作成します。
-	{
-		uint16_t cubeIndices[] =
-		{
-			0,1,2, 0,2,3, // 前面
-			4,5,6, 4,6,7, // 背面
-			8,9,10, 8,10,11, // 上面
-			12,14,13, 12,15,14, // 底面
-			16,17,18, 16,18,19, // 右側面
-			20,21,22, 20,22,23 // 左側面
-		};
-		const UINT indexBufferSize = sizeof(cubeIndices);
-
-		auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-		auto resourceDesc = CD3DX12_RESOURCE_DESC::Buffer(indexBufferSize);
-		DX::ThrowIfFailed(device->CreateCommittedResource(
-			&heapProperties,
-			D3D12_HEAP_FLAG_NONE,
-			&resourceDesc,
-			D3D12_RESOURCE_STATE_COPY_DEST,
-			nullptr,
-			IID_PPV_ARGS(&m_indexBuffer)));
-
-		heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-		DX::ThrowIfFailed(device->CreateCommittedResource(
-			&heapProperties,
-			D3D12_HEAP_FLAG_NONE,
-			&resourceDesc,
-			D3D12_RESOURCE_STATE_GENERIC_READ,
-			nullptr,
-			IID_PPV_ARGS(&indexBufferUploadHeap)));
-
-		// データを中間アップロードヒープにコピーし、アップロードヒープからインデックスバッファへのコピーをスケジュールします。
-		D3D12_SUBRESOURCE_DATA indexData = {};
-		indexData.pData = cubeIndices;
-		indexData.RowPitch = indexBufferSize;
-		indexData.SlicePitch = indexData.RowPitch;
-
-		UpdateSubresources<1>(commandList, m_indexBuffer.Get(), indexBufferUploadHeap.Get(), 0, 0, 1, &indexData);
-		auto resourceBarrier = CD3DX12_RESOURCE_BARRIER::Transition(m_indexBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_INDEX_BUFFER);
-		commandList->ResourceBarrier(1, &resourceBarrier);
-
-		// インデックス バッファ ビューを記述します。
-		m_indexBufferView.BufferLocation = m_indexBuffer->GetGPUVirtualAddress();
-		m_indexBufferView.Format = DXGI_FORMAT_R16_UINT;
-		m_indexBufferView.SizeInBytes = indexBufferSize;
-
-		m_numIndices = indexBufferSize / sizeof(uint16_t);
 	}
 
 	DX::ThrowIfFailed(commandList->Close());
@@ -537,12 +474,8 @@ void Game::PopulateCommandList()
 
 	ID3D12DescriptorHeap* ppHeaps[] = { m_cbvSrvHeap.Get() };
 	commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
-	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	commandList->IASetIndexBuffer(&m_indexBufferView);
+	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_POINTLIST);
 	commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
 	commandList->SetGraphicsRootDescriptorTable(0, m_cbvSrvHeap->GetGPUDescriptorHandleForHeapStart());
-
-	// インデックス描画に変更 — キューブ全体を描画します。
-	// m_numIndices がインデックス数（>0）であることを確認してください。
-	commandList->DrawIndexedInstanced(static_cast<UINT>(m_numIndices), 1u, 0u, 0, 0);
+	commandList->DrawInstanced(24, 1, 0, 0);
 }

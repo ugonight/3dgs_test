@@ -72,16 +72,12 @@ private:
 	{
 		DirectX::XMFLOAT3 position;
 		DirectX::XMFLOAT4 color;
-		DirectX::XMFLOAT3 normal;
 	};
 
 	struct SceneConstantBuffer
 	{
 		XMFLOAT4X4 mvp;        // Model-view-projection (MVP) matrix.
-		XMMATRIX invModel;  // Inverse model matrix.
-		XMFLOAT3 lightDir; // Directional light direction.
-		float ambient; // Ambient light intensity.
-		FLOAT padding[27];
+		FLOAT padding[48];
 	};
 
 	// Pipeline objects.
@@ -90,11 +86,8 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> m_cbvSrvHeap;
 
 	// App resources.
-	UINT m_numIndices;
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_vertexBuffer;
-	Microsoft::WRL::ComPtr<ID3D12Resource> m_indexBuffer;
 	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
-	D3D12_INDEX_BUFFER_VIEW m_indexBufferView;
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_cbvUploadHeap;
 	SceneConstantBuffer* m_pConstantBuffers;
