@@ -10,7 +10,6 @@
 
 #include <memory>
 
-
 // D3D12 デバイスを作成し、ゲームループを提供する基本的なゲーム実装。
 class Game final : public DX::IDeviceNotify
 {
@@ -68,12 +67,6 @@ private:
 	// DX12 用 DirectX Tool Kit を使用している場合はこの行のコメントを外してください:
 	// std::unique_ptr<DirectX::GraphicsMemory> m_graphicsMemory;
 
-	struct Vertex
-	{
-		DirectX::XMFLOAT3 position;
-		DirectX::XMFLOAT4 color;
-	};
-
 	struct SceneConstantBuffer
 	{
 		XMFLOAT4X4 mvp;        // Model-view-projection (MVP) matrix.
@@ -86,6 +79,7 @@ private:
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> m_cbvSrvHeap;
 
 	// App resources.
+	int m_vertexCount = 0;
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_vertexBuffer;
 	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
 

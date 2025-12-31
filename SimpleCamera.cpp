@@ -11,14 +11,15 @@
 
 //#include "stdafx.h"
 #include "SimpleCamera.h"
+#include <cmath>
 
 SimpleCamera::SimpleCamera() :
 	m_initialPosition(0, 0, 0),
 	m_position(m_initialPosition),
 	m_yaw(XM_PI),
 	m_pitch(0.0f),
-	m_lookDirection(0, 0, -1),
-	m_upDirection(0, 1, 0),
+	//m_lookDirection(0, 0, -1),
+	//m_upDirection(0, 1, 0),
 	m_moveSpeed(20.0f),
 	m_turnSpeed(XM_PIDIV2),
 	m_keysPressed{}
@@ -44,76 +45,72 @@ void SimpleCamera::SetTurnSpeed(float radiansPerSecond)
 void SimpleCamera::Reset()
 {
 	m_position = m_initialPosition;
-	m_yaw = XM_PI;
+	//m_yaw = XM_PI;
+	m_yaw = 0.0f;
 	m_pitch = 0.0f;
-	m_lookDirection = { 0, 0, -1 };
+	//m_lookDirection = { 0, 0, -1 };
 }
 
 void SimpleCamera::Update(float elapsedSeconds)
 {
-	// Calculate the move vector in camera space.
-	XMFLOAT3 move(0, 0, 0);
+	// 入力から回転（矢印キー）を先に更新
+	float rotateInterval = m_turnSpeed * elapsedSeconds;
+	if (m_keysPressed.left)
+		m_yaw -= rotateInterval;
+	if (m_keysPressed.right)
+		m_yaw += rotateInterval;
+	if (m_keysPressed.up)
+		m_pitch -= rotateInterval;
+	if (m_keysPressed.down)
+		m_pitch += rotateInterval;
 
-	if (m_keysPressed.a)
-		move.x -= 1.0f;
-	if (m_keysPressed.d)
-		move.x += 1.0f;
-	if (m_keysPressed.w)
-		move.z -= 1.0f;
-	if (m_keysPressed.s)
-		move.z += 1.0f;
-	if (m_keysPressed.q)
-		move.y += 1.0f;
-	if (m_keysPressed.e)
-		move.y -= 1.0f;
+	// カメラ基準の移動入力（WSAD: 前後左右、QE: 上下）
+	XMFLOAT3 moveInput(0, 0, 0);
+	if (m_keysPressed.a) moveInput.x -= 1.0f; // 左
+	if (m_keysPressed.d) moveInput.x += 1.0f; // 右
+	if (m_keysPressed.w) moveInput.z += 1.0f; // 前
+	if (m_keysPressed.s) moveInput.z -= 1.0f; // 後
+	if (m_keysPressed.q) moveInput.y += 1.0f; // 上
+	if (m_keysPressed.e) moveInput.y -= 1.0f; // 下
 
-	if (fabs(move.x) > 0.1f && fabs(move.y) > 0.1f && fabs(move.z) > 0.1f)
+	// 入力ベクトルを正規化（斜め移動時に速度が速くならないように）
+	XMVECTOR moveVec = XMLoadFloat3(&moveInput);
+	float length = XMVectorGetX(XMVector3Length(moveVec));
+	if (length > 1.0f)
 	{
-		XMVECTOR vector = XMVector3Normalize(XMLoadFloat3(&move));
-		move.x = XMVectorGetX(vector);
-		move.y = XMVectorGetY(vector);
-		move.z = XMVectorGetZ(vector);
+		moveVec = XMVector3Normalize(moveVec);
+		XMStoreFloat3(&moveInput, moveVec);
 	}
 
-	float moveInterval = m_moveSpeed * elapsedSeconds;
-	float rotateInterval = m_turnSpeed * elapsedSeconds;
+	if (length > 0)
+	{
+		XMVECTOR positionVec = XMLoadFloat3(&m_position);
+		XMVECTOR moveVecNorm = moveVec;
 
-	if (m_keysPressed.left)
-		m_yaw += rotateInterval;
-	if (m_keysPressed.right)
-		m_yaw -= rotateInterval;
-	if (m_keysPressed.up)
-		m_pitch += rotateInterval;
-	if (m_keysPressed.down)
-		m_pitch -= rotateInterval;
+		// 移動ベクトルを回転
+		XMVECTOR rotatedMove = XMVector3Rotate(moveVecNorm, XMQuaternionRotationRollPitchYaw(m_pitch, m_yaw, 0));
+		// 移動速度と経過時間を掛ける
+		float moveInterval = m_moveSpeed * elapsedSeconds;
+		rotatedMove = XMVectorScale(rotatedMove, moveInterval);
+		// 位置を更新
+		positionVec = XMVectorAdd(positionVec, rotatedMove);
+		XMStoreFloat3(&m_position, positionVec);
+	}
 
-	// Prevent looking too far up or down.
-	m_pitch = std::min(m_pitch, XM_PIDIV4);
-	m_pitch = std::max(-XM_PIDIV4, m_pitch);
-
-	// Move the camera in model space.
-	float x = move.x * -cosf(m_yaw) - move.z * sinf(m_yaw);
-	float y = move.y;
-	float z = move.x * sinf(m_yaw) - move.z * cosf(m_yaw);
-	m_position.x += x * moveInterval;
-	m_position.y += y * moveInterval;
-	m_position.z += z * moveInterval;
-
-	// Determine the look direction.
-	float r = cosf(m_pitch);
-	m_lookDirection.x = r * sinf(m_yaw);
-	m_lookDirection.y = sinf(m_pitch);
-	m_lookDirection.z = r * cosf(m_yaw);
 }
 
 XMMATRIX SimpleCamera::GetViewMatrix()
 {
-	return XMMatrixLookToRH(XMLoadFloat3(&m_position), XMLoadFloat3(&m_lookDirection), XMLoadFloat3(&m_upDirection));
+	// return XMMatrixLookToRH(XMLoadFloat3(&m_position), XMLoadFloat3(&m_lookDirection), XMLoadFloat3(&m_upDirection));
+	return XMMatrixInverse(nullptr,
+		XMMatrixRotationRollPitchYaw(m_pitch, m_yaw, 0) *
+		XMMatrixTranslationFromVector(XMLoadFloat3(&m_position))
+	);
 }
 
 XMMATRIX SimpleCamera::GetProjectionMatrix(float fov, float aspectRatio, float nearPlane, float farPlane)
 {
-	return XMMatrixPerspectiveFovRH(fov, aspectRatio, nearPlane, farPlane);
+	return XMMatrixPerspectiveFovLH(fov, aspectRatio, nearPlane, farPlane);
 }
 
 void SimpleCamera::OnKeyDown(WPARAM key)

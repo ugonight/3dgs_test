@@ -6,6 +6,7 @@
 
 #include "pch.h"
 #include "Game.h"
+#include "PlyLoader.h"
 
 extern void ExitGame() noexcept;
 
@@ -79,9 +80,10 @@ void Game::Update(DX::StepTimer const& timer)
 
 		XMFLOAT4X4 mvp;
 		DirectX::XMMATRIX model = XMMatrixScaling(1, 1, 1) *
-			XMMatrixRotationRollPitchYaw(XMConvertToRadians(0), XMConvertToRadians(30), XMConvertToRadians(0)) *
+			// 3DGS公式サンプルはなぜか30°傾いている
+			XMMatrixRotationRollPitchYaw(XMConvertToRadians(30), XMConvertToRadians(0), XMConvertToRadians(0)) *
 			XMMatrixTranslation(0, 0, 0);
-		XMStoreFloat4x4(&mvp, XMMatrixTranspose(model * m_camera.GetViewMatrix() * m_camera.GetProjectionMatrix(0.8f, aspectRatio)));
+		 XMStoreFloat4x4(&mvp, (model * m_camera.GetViewMatrix() * m_camera.GetProjectionMatrix(0.8f, aspectRatio)));
 		m_pConstantBuffers->mvp = mvp;
 	}
 
@@ -357,46 +359,9 @@ void Game::LoadAssets()
 
 	// 頂点バッファを作成します。
 	{
-		Vertex cubeVertices[] =
-		{
-			// 前面 (法線 -Z)
-			{ { -0.5f, 0.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f } },
-			{ {  0.5f, 0.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f } },
-			{ {  0.5f, 1.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f } },
-			{ { -0.5f, 1.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f } },
-
-			// 背面 (法線 +Z)
-			{ { -0.5f, 0.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f } },
-			{ { -0.5f, 1.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f } },
-			{ {  0.5f, 1.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f } },
-			{ {  0.5f, 0.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f } },
-
-			// 上面 (法線 +Y)
-			{ { -0.5f, 1.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f } },
-			{ { -0.5f, 1.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f } },
-			{ {  0.5f, 1.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f } },
-			{ {  0.5f, 1.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f } },
-
-			// 底面 (法線 -Y)
-			{ { -0.5f, 0.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f } },
-			{ {  0.5f, 0.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f } },
-			{ {  0.5f, 0.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f } },
-			{ { -0.5f, 0.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f } },
-
-			// 右側面 (法線 +X)
-			{ {  0.5f, 1.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f } },
-			{ {  0.5f, 0.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f } },
-			{ {  0.5f, 0.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f } },
-			{ {  0.5f, 1.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f } },
-
-			// 左側面 (法線 -X)
-			{ { -0.5f, 0.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f } },
-			{ { -0.5f, 0.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f } },
-			{ { -0.5f, 1.0f, 0.0f }, { 1.0f,1.0f,1.0f,1.0f } },
-			{ { -0.5f, 1.0f, 1.0f }, { 1.0f,1.0f,1.0f,1.0f } },
-		};
-
-		const UINT vertexBufferSize = sizeof(cubeVertices);
+		std::vector<Vertex> vertices = PlyLoader::Load("D:/Downloads/models/garden/point_cloud/iteration_7000/point_cloud.ply");
+		m_vertexCount = vertices.size();
+		const UINT vertexBufferSize = static_cast<UINT>(sizeof(Vertex) * vertices.size());
 
 		auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
 		auto resourceDesc = CD3DX12_RESOURCE_DESC::Buffer(vertexBufferSize);
@@ -419,7 +384,7 @@ void Game::LoadAssets()
 
 		// データを中間アップロードヒープにコピーし、アップロードヒープから頂点バッファへのコピーをスケジュールします。
 		D3D12_SUBRESOURCE_DATA vertexData = {};
-		vertexData.pData = cubeVertices;
+		vertexData.pData = reinterpret_cast<BYTE*>(vertices.data());
 		vertexData.RowPitch = vertexBufferSize;
 		vertexData.SlicePitch = vertexData.RowPitch;
 
@@ -477,5 +442,5 @@ void Game::PopulateCommandList()
 	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_POINTLIST);
 	commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
 	commandList->SetGraphicsRootDescriptorTable(0, m_cbvSrvHeap->GetGPUDescriptorHandleForHeapStart());
-	commandList->DrawInstanced(24, 1, 0, 0);
+	commandList->DrawInstanced(m_vertexCount, 1, 0, 0);
 }

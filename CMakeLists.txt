@@ -9,7 +9,7 @@ option(BUILD_TEST_TEMPLATE "Ignore warnings related to TODOs" OFF)
 
 option(ENABLE_CODE_ANALYSIS "Use Static Code Analysis on build" OFF)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -29,7 +29,9 @@ add_executable(${PROJECT_NAME} WIN32
     pch.h
     SimpleCamera.cpp
     SimpleCamera.h
-)
+    PlyLoader.h
+    PlyLoader.cpp
+ "Vertex.h")
 
 if(NOT MINGW)
     target_precompile_headers(${PROJECT_NAME} PRIVATE pch.h)

@@ -27,7 +27,7 @@ PSInput VSMain(float4 position : POSITION, float4 color : COLOR)
     PSInput result;
 
     // 位置変換（クリップ空間）
-    result.position = mul(position, g_mWorldViewProj);
+    result.position = mul(g_mWorldViewProj, position);
     // ベースカラーはそのまま伝える
     result.color = color;
 

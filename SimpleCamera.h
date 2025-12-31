@@ -50,8 +50,8 @@ private:
     XMFLOAT3 m_position;
     float m_yaw;                // Relative to the +z axis.
     float m_pitch;                // Relative to the xz plane.
-    XMFLOAT3 m_lookDirection;
-    XMFLOAT3 m_upDirection;
+    //XMFLOAT3 m_lookDirection;
+    //XMFLOAT3 m_upDirection;
     float m_moveSpeed;            // Speed at which the camera moves, in units per second.
     float m_turnSpeed;            // Speed at which the camera turns, in radians per second.
 
