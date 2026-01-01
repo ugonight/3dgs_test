@@ -3,6 +3,7 @@
 //
 
 #include <D3Dcompiler.h>
+#include <dxcapi.h>
 
 #include "pch.h"
 #include "Game.h"
@@ -13,6 +14,12 @@ extern void ExitGame() noexcept;
 using namespace DirectX;
 
 using Microsoft::WRL::ComPtr;
+
+static Microsoft::WRL::ComPtr<ID3DBlob> CompileShaderWithDXC(
+	const std::wstring& filename,
+	const std::wstring& entryPoint,
+	const std::wstring& target,
+	bool enableDebug);
 
 Game::Game() noexcept(false)
 {
@@ -83,7 +90,7 @@ void Game::Update(DX::StepTimer const& timer)
 			// 3DGS公式サンプルはなぜか30°傾いている
 			XMMatrixRotationRollPitchYaw(XMConvertToRadians(30), XMConvertToRadians(0), XMConvertToRadians(0)) *
 			XMMatrixTranslation(0, 0, 0);
-		 XMStoreFloat4x4(&mvp, (model * m_camera.GetViewMatrix() * m_camera.GetProjectionMatrix(0.8f, aspectRatio)));
+		XMStoreFloat4x4(&mvp, (model * m_camera.GetViewMatrix() * m_camera.GetProjectionMatrix(0.8f, aspectRatio)));
 		m_pConstantBuffers->mvp = mvp;
 	}
 
@@ -266,7 +273,7 @@ void Game::LoadPipeline()
 	{
 		// シェーダーリソースビュー (SRV) と定数バッファビュー (CBV) 記述子ヒープを記述して作成します。
 		D3D12_DESCRIPTOR_HEAP_DESC cbvSrvHeapDesc = {};
-		cbvSrvHeapDesc.NumDescriptors = 1;
+		cbvSrvHeapDesc.NumDescriptors = 2;
 		cbvSrvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 		cbvSrvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 		DX::ThrowIfFailed(device->CreateDescriptorHeap(&cbvSrvHeapDesc, IID_PPV_ARGS(&m_cbvSrvHeap)));
@@ -291,10 +298,12 @@ void Game::LoadAssets()
 			featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_0;
 		}
 
-		CD3DX12_DESCRIPTOR_RANGE1 ranges[1];
+		CD3DX12_DESCRIPTOR_RANGE1 ranges[2];
 		ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
-		CD3DX12_ROOT_PARAMETER1 rootParameters[1];
+		ranges[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
+		CD3DX12_ROOT_PARAMETER1 rootParameters[2];
 		rootParameters[0].InitAsDescriptorTable(1, &ranges[0], D3D12_SHADER_VISIBILITY_ALL);
+		rootParameters[1].InitAsDescriptorTable(1, &ranges[1], D3D12_SHADER_VISIBILITY_ALL);
 
 		CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc;
 		rootSignatureDesc.Init_1_1(_countof(rootParameters), rootParameters, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
@@ -307,8 +316,8 @@ void Game::LoadAssets()
 
 	// パイプラインステートを作成します（シェーダーのコンパイルと読み込みを含む）。
 	{
-		ComPtr<ID3DBlob> vertexShader;
-		ComPtr<ID3DBlob> pixelShader;
+		//ComPtr<ID3DBlob> vertexShader;
+		//ComPtr<ID3DBlob> pixelShader;
 
 #if defined(_DEBUG)
 		// グラフィックスデバッグツールでシェーダーデバッグを強化します。
@@ -317,35 +326,61 @@ void Game::LoadAssets()
 		UINT compileFlags = 0;
 #endif
 
-		DX::ThrowIfFailed(D3DCompileFromFile(L"shaders.hlsl", nullptr, nullptr, "VSMain", "vs_5_0", compileFlags, 0, &vertexShader, nullptr));
-		DX::ThrowIfFailed(D3DCompileFromFile(L"shaders.hlsl", nullptr, nullptr, "PSMain", "ps_5_0", compileFlags, 0, &pixelShader, nullptr));
+		// DX::ThrowIfFailed(D3DCompileFromFile(L"shaders.hlsl", nullptr, nullptr, "MSMain", "ms_5_0", compileFlags, 0, &meshShader, nullptr));
+		// DX::ThrowIfFailed(D3DCompileFromFile(L"shaders.hlsl", nullptr, nullptr, "PSMain", "ps_5_0", compileFlags, 0, &pixelShader, nullptr));
 
-		// 頂点入力レイアウトを定義します。
-		D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
-		{
-			{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0,  D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-			{ "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		};
+		ComPtr<ID3DBlob> meshShader = CompileShaderWithDXC(L"shaders.hlsl", L"MSMain", L"ms_6_5", true);
+		ComPtr<ID3DBlob> pixelShader = CompileShaderWithDXC(L"shaders.hlsl", L"PSMain", L"ps_6_5", true);
+
+		//// 頂点入力レイアウトを定義します。
+		//D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
+		//{
+		//	{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0,  D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		//	{ "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		//};
 
 		CD3DX12_RASTERIZER_DESC rasterizerStateDesc(D3D12_DEFAULT);
 		//rasterizerStateDesc.CullMode = D3D12_CULL_MODE_NONE;
 
 		// グラフィックスパイプラインステートオブジェクト（PSO）を記述して作成します。
-		D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
-		psoDesc.InputLayout = { inputElementDescs, _countof(inputElementDescs) };
+		//D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
+		//psoDesc.InputLayout = { inputElementDescs, _countof(inputElementDescs) };
+		//psoDesc.pRootSignature = m_rootSignature.Get();
+		//psoDesc.VS = CD3DX12_SHADER_BYTECODE(vertexShader.Get());
+		//psoDesc.PS = CD3DX12_SHADER_BYTECODE(pixelShader.Get());
+		//psoDesc.RasterizerState = rasterizerStateDesc;
+		//psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+		//psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+		//psoDesc.SampleMask = UINT_MAX;
+		//psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
+		//psoDesc.NumRenderTargets = 1;
+		//psoDesc.RTVFormats[0] = m_deviceResources->GetBackBufferFormat();
+		//psoDesc.DSVFormat = m_deviceResources->GetDepthBufferFormat();
+		//psoDesc.SampleDesc.Count = 1;
+		//DX::ThrowIfFailed(device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineState)));
+
+		D3DX12_MESH_SHADER_PIPELINE_STATE_DESC psoDesc = {};
 		psoDesc.pRootSignature = m_rootSignature.Get();
-		psoDesc.VS = CD3DX12_SHADER_BYTECODE(vertexShader.Get());
+		psoDesc.MS = CD3DX12_SHADER_BYTECODE(meshShader.Get());
 		psoDesc.PS = CD3DX12_SHADER_BYTECODE(pixelShader.Get());
-		psoDesc.RasterizerState = rasterizerStateDesc;
-		psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-		psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-		psoDesc.SampleMask = UINT_MAX;
-		psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
 		psoDesc.NumRenderTargets = 1;
 		psoDesc.RTVFormats[0] = m_deviceResources->GetBackBufferFormat();
 		psoDesc.DSVFormat = m_deviceResources->GetDepthBufferFormat();
-		psoDesc.SampleDesc.Count = 1;
-		DX::ThrowIfFailed(device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineState)));
+		psoDesc.RasterizerState = rasterizerStateDesc;
+		psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);             // 不透明ブレンド
+		psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT); // 深度テスト有効、ステンシル無効
+		psoDesc.SampleMask = UINT_MAX;
+		psoDesc.SampleDesc = DefaultSampleDesc();
+		psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+
+		auto psoStream = CD3DX12_PIPELINE_MESH_STATE_STREAM(psoDesc);
+		D3D12_PIPELINE_STATE_STREAM_DESC streamDesc;
+		streamDesc.pPipelineStateSubobjectStream = &psoStream;
+		streamDesc.SizeInBytes = sizeof(psoStream);
+
+		ComPtr<ID3D12Device2> device2;
+		device->QueryInterface(IID_PPV_ARGS(&device2));
+		DX::ThrowIfFailed(device2->CreatePipelineState(&streamDesc, IID_PPV_ARGS(&m_pipelineState)));
 	}
 
 	// 注: ComPtr は CPU オブジェクトですが、これらのリソースは、それらを参照するコマンドリストが GPU 上で実行を完了するまでスコープ内に留まる必要があります。
@@ -357,7 +392,36 @@ void Game::LoadAssets()
 	DX::ThrowIfFailed(m_deviceResources->GetCommandAllocator()->Reset());
 	DX::ThrowIfFailed(commandList->Reset(m_deviceResources->GetCommandAllocator(), nullptr));
 
-	// 頂点バッファを作成します。
+	auto cbvSrvHandle = m_cbvSrvHeap->GetCPUDescriptorHandleForHeapStart();
+	{
+		// 定数バッファ用のアップロード ヒープを作成します。
+		auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+		auto resourceDesc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(SceneConstantBuffer));
+		DX::ThrowIfFailed(device->CreateCommittedResource(
+			&heapProperties,
+			D3D12_HEAP_FLAG_NONE,
+			&resourceDesc,
+			D3D12_RESOURCE_STATE_GENERIC_READ,
+			nullptr,
+			IID_PPV_ARGS(&m_cbvUploadHeap)));
+
+		// 定数バッファをマップします。
+		// D3D11とは異なり、リソースはGPUで使用するためにアンマップする必要はありません。
+		// このサンプルでは、​​各フレームのマッピング/アンマップによるオーバーヘッドを回避するため、リソースは「永続的に」マップされたままになります。
+		CD3DX12_RANGE readRange(0, 0); // CPU 上でこのリソースから読み取るつもりはありません。
+		DX::ThrowIfFailed(m_cbvUploadHeap->Map(0, &readRange, reinterpret_cast<void**>(&m_pConstantBuffers)));
+
+		// 定数バッファビュー (CBV) を記述して作成します。
+		auto cbvSrvHandle = m_cbvSrvHeap->GetCPUDescriptorHandleForHeapStart();
+		D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
+		cbvDesc.BufferLocation = m_cbvUploadHeap->GetGPUVirtualAddress();
+		cbvDesc.SizeInBytes = sizeof(SceneConstantBuffer);
+		device->CreateConstantBufferView(&cbvDesc, cbvSrvHandle);
+	}
+
+	cbvSrvHandle.ptr += m_cbvSrvDescriptorSize;
+
+	// 頂点バッファ（SRV）
 	{
 		std::vector<Vertex> vertices = PlyLoader::Load("D:/Downloads/models/garden/point_cloud/iteration_7000/point_cloud.ply");
 		m_vertexCount = vertices.size();
@@ -389,45 +453,25 @@ void Game::LoadAssets()
 		vertexData.SlicePitch = vertexData.RowPitch;
 
 		UpdateSubresources<1>(commandList, m_vertexBuffer.Get(), vertexBufferUploadHeap.Get(), 0, 0, 1, &vertexData);
-		auto resourceBarrier = CD3DX12_RESOURCE_BARRIER::Transition(m_vertexBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER);
+		auto resourceBarrier = CD3DX12_RESOURCE_BARRIER::Transition(m_vertexBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
 		commandList->ResourceBarrier(1, &resourceBarrier);
 
-		// 頂点バッファビューを初期化します。
-		m_vertexBufferView.BufferLocation = m_vertexBuffer->GetGPUVirtualAddress();
-		m_vertexBufferView.StrideInBytes = sizeof(Vertex);
-		m_vertexBufferView.SizeInBytes = vertexBufferSize;
+		// SRV を作成
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.Buffer.FirstElement = 0;
+		srvDesc.Buffer.NumElements = m_vertexCount;
+		srvDesc.Buffer.StructureByteStride = sizeof(Vertex);
+		srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+		srvDesc.Format = DXGI_FORMAT_UNKNOWN; // StructuredBuffer の場合は UNKNOWN
+		device->CreateShaderResourceView(m_vertexBuffer.Get(), &srvDesc, cbvSrvHandle);
 	}
 
 	DX::ThrowIfFailed(commandList->Close());
 	ID3D12CommandList* ppCommandLists[] = { commandList };
 	commandQueue->ExecuteCommandLists(_countof(ppCommandLists), ppCommandLists);
 	m_deviceResources->WaitForGpu();
-
-	{
-		// 定数バッファ用のアップロード ヒープを作成します。
-		auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-		auto resourceDesc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(SceneConstantBuffer));
-		DX::ThrowIfFailed(device->CreateCommittedResource(
-			&heapProperties,
-			D3D12_HEAP_FLAG_NONE,
-			&resourceDesc,
-			D3D12_RESOURCE_STATE_GENERIC_READ,
-			nullptr,
-			IID_PPV_ARGS(&m_cbvUploadHeap)));
-
-		// 定数バッファをマップします。
-		// D3D11とは異なり、リソースはGPUで使用するためにアンマップする必要はありません。
-		// このサンプルでは、​​各フレームのマッピング/アンマップによるオーバーヘッドを回避するため、リソースは「永続的に」マップされたままになります。
-		CD3DX12_RANGE readRange(0, 0); // CPU 上でこのリソースから読み取るつもりはありません。
-		DX::ThrowIfFailed(m_cbvUploadHeap->Map(0, &readRange, reinterpret_cast<void**>(&m_pConstantBuffers)));
-
-		// 定数バッファビュー (CBV) を記述して作成します。
-		auto cbvSrvHandle = m_cbvSrvHeap->GetCPUDescriptorHandleForHeapStart();
-		D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
-		cbvDesc.BufferLocation = m_cbvUploadHeap->GetGPUVirtualAddress();
-		cbvDesc.SizeInBytes = sizeof(SceneConstantBuffer);
-		device->CreateConstantBufferView(&cbvDesc, cbvSrvHandle);
-	}
 }
 
 void Game::PopulateCommandList()
@@ -440,7 +484,90 @@ void Game::PopulateCommandList()
 	ID3D12DescriptorHeap* ppHeaps[] = { m_cbvSrvHeap.Get() };
 	commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
 	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_POINTLIST);
-	commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
-	commandList->SetGraphicsRootDescriptorTable(0, m_cbvSrvHeap->GetGPUDescriptorHandleForHeapStart());
-	commandList->DrawInstanced(m_vertexCount, 1, 0, 0);
+	//commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
+	auto heapStart = m_cbvSrvHeap->GetGPUDescriptorHandleForHeapStart();
+	commandList->SetGraphicsRootDescriptorTable(0, heapStart); // CBV
+	heapStart.ptr += m_cbvSrvDescriptorSize;
+	commandList->SetGraphicsRootDescriptorTable(1, heapStart); // SRV
+	//commandList->DrawInstanced(m_vertexCount, 1, 0, 0);
+
+	ID3D12GraphicsCommandList6* meshCommandList = nullptr;
+	commandList->QueryInterface(IID_PPV_ARGS(&meshCommandList));
+	meshCommandList->DispatchMesh(m_vertexCount / 128, 1, 1);
+}
+
+static Microsoft::WRL::ComPtr<ID3DBlob> CompileShaderWithDXC(
+	const std::wstring& filename,
+	const std::wstring& entryPoint,
+	const std::wstring& target,
+	bool enableDebug)
+{
+	using Microsoft::WRL::ComPtr;
+
+	ComPtr<IDxcUtils> utils;
+	ComPtr<IDxcCompiler3> compiler3;
+	DX::ThrowIfFailed(DxcCreateInstance(CLSID_DxcUtils, IID_PPV_ARGS(&utils)));
+	DX::ThrowIfFailed(DxcCreateInstance(CLSID_DxcCompiler, IID_PPV_ARGS(&compiler3)));
+
+	ComPtr<IDxcBlobEncoding> sourceBlob;
+	// IDxcLibrary の代わりに IDxcUtils::LoadFile を使用
+	DX::ThrowIfFailed(utils->LoadFile(filename.c_str(), nullptr, &sourceBlob));
+
+	// DxcBuffer に詰める
+	DxcBuffer sourceBuffer;
+	sourceBuffer.Ptr = sourceBlob->GetBufferPointer();
+	sourceBuffer.Size = sourceBlob->GetBufferSize();
+	sourceBuffer.Encoding = DXC_CP_UTF8;
+
+	// 引数を作る
+	std::vector<LPCWSTR> args;
+
+	args.push_back(filename.c_str());
+
+	args.push_back(L"-E");
+	args.push_back(entryPoint.c_str());
+
+	args.push_back(L"-T");
+	args.push_back(target.c_str());
+
+	if (enableDebug)
+	{
+		args.push_back(L"-Zi");            // デバッグ情報を生成
+		args.push_back(L"-Qembed_debug");  // デバッグ情報をシェーダーに埋め込む
+		args.push_back(L"-Od");            // 最適化無効（任意）
+	}
+
+	ComPtr<IDxcIncludeHandler> includeHandler;
+	DX::ThrowIfFailed(utils->CreateDefaultIncludeHandler(&includeHandler));
+
+	ComPtr<IDxcResult> result;
+	DX::ThrowIfFailed(compiler3->Compile(
+		&sourceBuffer,
+		args.empty() ? nullptr : args.data(),
+		static_cast<UINT32>(args.size()),
+		includeHandler.Get(),
+		IID_PPV_ARGS(&result)));
+
+	HRESULT hrStatus = S_OK;
+	DX::ThrowIfFailed(result->GetStatus(&hrStatus));
+	if (FAILED(hrStatus))
+	{
+		ComPtr<IDxcBlobUtf8> errors;
+		result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&errors), nullptr);
+		if (errors)
+		{
+			auto errStr = errors->GetStringPointer();
+			OutputDebugStringA(reinterpret_cast<const char*>(errors->GetBufferPointer()));
+		}
+		throw std::runtime_error("DXC shader compile failed");
+	}
+
+	ComPtr<IDxcBlob> program;
+	DX::ThrowIfFailed(result->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&program), nullptr));
+
+	// IDxcBlob -> ID3DBlob にコピーして返す
+	ComPtr<ID3DBlob> d3dBlob;
+	DX::ThrowIfFailed(::D3DCreateBlob(program->GetBufferSize(), &d3dBlob));
+	memcpy(d3dBlob->GetBufferPointer(), program->GetBufferPointer(), program->GetBufferSize());
+	return d3dBlob;
 }

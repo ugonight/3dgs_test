@@ -81,7 +81,7 @@ private:
 	// App resources.
 	int m_vertexCount = 0;
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_vertexBuffer;
-	D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
+	// D3D12_VERTEX_BUFFER_VIEW m_vertexBufferView;
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> m_cbvUploadHeap;
 	SceneConstantBuffer* m_pConstantBuffers;
