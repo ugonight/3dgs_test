@@ -52,10 +52,11 @@ std::vector<Vertex> PlyLoader::Load(std::string filename)
 
 		Vertex v;
 		// 位置
-		v.position = DirectX::XMFLOAT3(
+		v.position = DirectX::XMFLOAT4(
 			basic_props.position[0],
 			-basic_props.position[1],
-			basic_props.position[2]
+			basic_props.position[2], 
+			1.0f
 		);
 		// 色
 		{

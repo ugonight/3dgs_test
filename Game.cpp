@@ -90,7 +90,7 @@ void Game::Update(DX::StepTimer const& timer)
 			// 3DGS公式サンプルはなぜか30°傾いている
 			XMMatrixRotationRollPitchYaw(XMConvertToRadians(30), XMConvertToRadians(0), XMConvertToRadians(0)) *
 			XMMatrixTranslation(0, 0, 0);
-		XMStoreFloat4x4(&mvp, (model * m_camera.GetViewMatrix() * m_camera.GetProjectionMatrix(0.8f, aspectRatio)));
+		XMStoreFloat4x4(&mvp, (model * m_camera.GetViewMatrix() * m_camera.GetProjectionMatrix(0.8f, aspectRatio, 0.1f, 1000.f)));
 		m_pConstantBuffers->mvp = mvp;
 	}
 
@@ -340,7 +340,7 @@ void Game::LoadAssets()
 		//};
 
 		CD3DX12_RASTERIZER_DESC rasterizerStateDesc(D3D12_DEFAULT);
-		//rasterizerStateDesc.CullMode = D3D12_CULL_MODE_NONE;
+		rasterizerStateDesc.CullMode = D3D12_CULL_MODE_NONE;
 
 		// グラフィックスパイプラインステートオブジェクト（PSO）を記述して作成します。
 		//D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
@@ -369,6 +369,7 @@ void Game::LoadAssets()
 		psoDesc.RasterizerState = rasterizerStateDesc;
 		psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);             // 不透明ブレンド
 		psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT); // 深度テスト有効、ステンシル無効
+		psoDesc.DepthStencilState.DepthEnable = false;
 		psoDesc.SampleMask = UINT_MAX;
 		psoDesc.SampleDesc = DefaultSampleDesc();
 		psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
@@ -412,7 +413,6 @@ void Game::LoadAssets()
 		DX::ThrowIfFailed(m_cbvUploadHeap->Map(0, &readRange, reinterpret_cast<void**>(&m_pConstantBuffers)));
 
 		// 定数バッファビュー (CBV) を記述して作成します。
-		auto cbvSrvHandle = m_cbvSrvHeap->GetCPUDescriptorHandleForHeapStart();
 		D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
 		cbvDesc.BufferLocation = m_cbvUploadHeap->GetGPUVirtualAddress();
 		cbvDesc.SizeInBytes = sizeof(SceneConstantBuffer);
@@ -453,7 +453,7 @@ void Game::LoadAssets()
 		vertexData.SlicePitch = vertexData.RowPitch;
 
 		UpdateSubresources<1>(commandList, m_vertexBuffer.Get(), vertexBufferUploadHeap.Get(), 0, 0, 1, &vertexData);
-		auto resourceBarrier = CD3DX12_RESOURCE_BARRIER::Transition(m_vertexBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		auto resourceBarrier = CD3DX12_RESOURCE_BARRIER::Transition(m_vertexBuffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
 		commandList->ResourceBarrier(1, &resourceBarrier);
 
 		// SRV を作成
@@ -477,13 +477,18 @@ void Game::LoadAssets()
 void Game::PopulateCommandList()
 {
 	auto commandList = m_deviceResources->GetCommandList();
+
+	const auto rtvDescriptor = m_deviceResources->GetRenderTargetView();
+	const auto dsvDescriptor = m_deviceResources->GetDepthStencilView();
+	commandList->OMSetRenderTargets(1, &rtvDescriptor, FALSE, &dsvDescriptor);
+
 	// 必要な状態を設定します。
 	commandList->SetPipelineState(m_pipelineState.Get());
 	commandList->SetGraphicsRootSignature(m_rootSignature.Get());
 
 	ID3D12DescriptorHeap* ppHeaps[] = { m_cbvSrvHeap.Get() };
 	commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
-	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_POINTLIST);
+	//commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_POINTLIST);
 	//commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
 	auto heapStart = m_cbvSrvHeap->GetGPUDescriptorHandleForHeapStart();
 	commandList->SetGraphicsRootDescriptorTable(0, heapStart); // CBV
@@ -493,7 +498,10 @@ void Game::PopulateCommandList()
 
 	ID3D12GraphicsCommandList6* meshCommandList = nullptr;
 	commandList->QueryInterface(IID_PPV_ARGS(&meshCommandList));
-	meshCommandList->DispatchMesh(m_vertexCount / 128, 1, 1);
+	constexpr UINT THREADS_PER_GROUP = 128;
+	UINT groupCount = (m_vertexCount + THREADS_PER_GROUP - 1) / THREADS_PER_GROUP;
+	meshCommandList->DispatchMesh(groupCount, 1, 1);
+	//meshCommandList->DispatchMesh(m_vertexCount, 1, 1);
 }
 
 static Microsoft::WRL::ComPtr<ID3DBlob> CompileShaderWithDXC(

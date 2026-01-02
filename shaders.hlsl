@@ -1,18 +1,8 @@
-//*********************************************************
-//
-// Copyright (c) Microsoft. All rights reserved.
-// This code is licensed under the MIT License (MIT).
-// THIS CODE IS PROVIDED *AS IS* WITHOUT WARRANTY OF
-// ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING ANY
-// IMPLIED WARRANTIES OF FITNESS FOR A PARTICULAR
-// PURPOSE, MERCHANTABILITY, OR NON-INFRINGEMENT.
-//
-//*********************************************************
-
 struct Vertex
 {
-    float3 position;
+    float4 position;
     float4 color;
+    float3x3 cov3d;
 };
 
 struct PSInput
@@ -28,61 +18,49 @@ cbuffer cb0 : register(b0)
 
 StructuredBuffer<Vertex> Vertices : register(t0);
 
-//// HLSL 側 VSMain は float4 position : POSITION を受け取ります。
-//// C++ 側が R32G32B32_FLOAT（3成分）で渡した場合、ドライバは自動で w 成分を 1.0 にするため、シェーダーには (x,y,z,1.0) が入ります。
-//PSInput VSMain(float4 position : POSITION, float4 color : COLOR)
-//{
-//    PSInput result;
+#define THREADS_PER_GROUP 128
 
-//    // 位置変換（クリップ空間）
-//    result.position = mul(g_mWorldViewProj, position);
-//    // ベースカラーはそのまま伝える
-//    result.color = color;
-
-//    return result;
-//}
-
-[NumThreads(128, 1, 1)]
+[NumThreads(THREADS_PER_GROUP, 1, 1)]
 [OutputTopology("triangle")]
 void MSMain(
-    uint gtid : SV_GroupThreadID, // グループ内のスレッド ID
-    uint gid : SV_GroupID, // グループ ID
-    out vertices PSInput verts[128],
-    out indices uint3 tris[64]
+    uint tid : SV_GroupIndex,
+    uint gid : SV_GroupID,
+    out vertices PSInput verts[4],
+    out indices uint3 indices[2]
 )
 {
-    SetMeshOutputCounts(128, 64);
+    uint vid = gid * THREADS_PER_GROUP + tid;
     
-    uint index = gid * 128 + gtid; // 各スレッドが担当する頂点のインデックス
-    
-    Vertex v = Vertices[index];
-    
-    // 点を中心に小さなクワッドを作成（サイズ: 0.01単位、カメラ向きにするためビルボード化可能）
-    float size = 0.01f;
-    float3 offsets[4] =
-    {
-        float3(-size, -size, 0), // 左下
-        float3(size, -size, 0), // 右下
-        float3(-size, size, 0), // 左上
-        float3(size, size, 0) // 右上
-    };
-    
-    // 頂点出力（クワッドの4頂点）
-    uint vertBase = gtid * 4; // スレッドごとの出力オフセット
-    for (uint i = 0; i < 4; ++i)
-    {
-        float3 worldPos = v.position + offsets[i]; // オフセット追加（ビルボード化でカメラ方向調整）
-        verts[vertBase + i].position = mul(g_mWorldViewProj, float4(worldPos, 1.0f));
-        verts[vertBase + i].color = v.color;
-    }
+    uint count, stride;
+    Vertices.GetDimensions(count, stride);
 
-    // インデックス出力（2三角形）
-    uint primBase = gtid * 2;
-    tris[primBase + 0] = uint3(vertBase + 0, vertBase + 1, vertBase + 2); // 第一三角形
-    tris[primBase + 1] = uint3(vertBase + 1, vertBase + 2, vertBase + 3); // 第二三角形
+    bool valid = (vid < count);
+
+    SetMeshOutputCounts(valid ? 4 : 0, valid ? 2 : 0);
+
+    if (!valid)
+        return;
+
+    Vertex v = Vertices[vid];
+    float4 p = mul(g_mWorldViewProj, float4(v.position.xyz, 1));
+
+    float pointSize = 0.01f;
+    float2 s = float2(pointSize, pointSize);
+
+    verts[0].position = p + float4(-s.x, s.y, 0, 0);
+    verts[1].position = p + float4(-s.x, -s.y, 0, 0);
+    verts[2].position = p + float4(s.x, -s.y, 0, 0);
+    verts[3].position = p + float4(s.x, s.y, 0, 0);
+
+    verts[0].color =
+    verts[1].color =
+    verts[2].color = 
+    verts[3].color = v.color;
+
+    indices[0] = uint3(0, 1, 3);
+    indices[1] = uint3(2, 3, 1);
 }
 
-// ピクセルシェーダで拡散＋アンビエント照明を計算（per-pixel lighting）
 float4 PSMain(PSInput input) : SV_TARGET
 {
     return input.color;
