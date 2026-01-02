@@ -326,41 +326,16 @@ void Game::LoadAssets()
 		UINT compileFlags = 0;
 #endif
 
-		// DX::ThrowIfFailed(D3DCompileFromFile(L"shaders.hlsl", nullptr, nullptr, "MSMain", "ms_5_0", compileFlags, 0, &meshShader, nullptr));
-		// DX::ThrowIfFailed(D3DCompileFromFile(L"shaders.hlsl", nullptr, nullptr, "PSMain", "ps_5_0", compileFlags, 0, &pixelShader, nullptr));
-
+		ComPtr<ID3DBlob> taskShader = CompileShaderWithDXC(L"shaders.hlsl", L"ASMain", L"as_6_5", true);
 		ComPtr<ID3DBlob> meshShader = CompileShaderWithDXC(L"shaders.hlsl", L"MSMain", L"ms_6_5", true);
 		ComPtr<ID3DBlob> pixelShader = CompileShaderWithDXC(L"shaders.hlsl", L"PSMain", L"ps_6_5", true);
-
-		//// 頂点入力レイアウトを定義します。
-		//D3D12_INPUT_ELEMENT_DESC inputElementDescs[] =
-		//{
-		//	{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0,  D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		//	{ "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		//};
 
 		CD3DX12_RASTERIZER_DESC rasterizerStateDesc(D3D12_DEFAULT);
 		rasterizerStateDesc.CullMode = D3D12_CULL_MODE_NONE;
 
-		// グラフィックスパイプラインステートオブジェクト（PSO）を記述して作成します。
-		//D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
-		//psoDesc.InputLayout = { inputElementDescs, _countof(inputElementDescs) };
-		//psoDesc.pRootSignature = m_rootSignature.Get();
-		//psoDesc.VS = CD3DX12_SHADER_BYTECODE(vertexShader.Get());
-		//psoDesc.PS = CD3DX12_SHADER_BYTECODE(pixelShader.Get());
-		//psoDesc.RasterizerState = rasterizerStateDesc;
-		//psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-		//psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
-		//psoDesc.SampleMask = UINT_MAX;
-		//psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
-		//psoDesc.NumRenderTargets = 1;
-		//psoDesc.RTVFormats[0] = m_deviceResources->GetBackBufferFormat();
-		//psoDesc.DSVFormat = m_deviceResources->GetDepthBufferFormat();
-		//psoDesc.SampleDesc.Count = 1;
-		//DX::ThrowIfFailed(device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineState)));
-
 		D3DX12_MESH_SHADER_PIPELINE_STATE_DESC psoDesc = {};
 		psoDesc.pRootSignature = m_rootSignature.Get();
+		psoDesc.AS = CD3DX12_SHADER_BYTECODE(taskShader.Get());
 		psoDesc.MS = CD3DX12_SHADER_BYTECODE(meshShader.Get());
 		psoDesc.PS = CD3DX12_SHADER_BYTECODE(pixelShader.Get());
 		psoDesc.NumRenderTargets = 1;
@@ -369,7 +344,6 @@ void Game::LoadAssets()
 		psoDesc.RasterizerState = rasterizerStateDesc;
 		psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);             // 不透明ブレンド
 		psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT); // 深度テスト有効、ステンシル無効
-		psoDesc.DepthStencilState.DepthEnable = false;
 		psoDesc.SampleMask = UINT_MAX;
 		psoDesc.SampleDesc = DefaultSampleDesc();
 		psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
@@ -488,20 +462,17 @@ void Game::PopulateCommandList()
 
 	ID3D12DescriptorHeap* ppHeaps[] = { m_cbvSrvHeap.Get() };
 	commandList->SetDescriptorHeaps(_countof(ppHeaps), ppHeaps);
-	//commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_POINTLIST);
-	//commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
 	auto heapStart = m_cbvSrvHeap->GetGPUDescriptorHandleForHeapStart();
 	commandList->SetGraphicsRootDescriptorTable(0, heapStart); // CBV
 	heapStart.ptr += m_cbvSrvDescriptorSize;
 	commandList->SetGraphicsRootDescriptorTable(1, heapStart); // SRV
-	//commandList->DrawInstanced(m_vertexCount, 1, 0, 0);
 
 	ID3D12GraphicsCommandList6* meshCommandList = nullptr;
 	commandList->QueryInterface(IID_PPV_ARGS(&meshCommandList));
-	constexpr UINT THREADS_PER_GROUP = 128;
-	UINT groupCount = (m_vertexCount + THREADS_PER_GROUP - 1) / THREADS_PER_GROUP;
-	meshCommandList->DispatchMesh(groupCount, 1, 1);
-	//meshCommandList->DispatchMesh(m_vertexCount, 1, 1);
+	constexpr UINT TASK_THREADS_PER_GROUP = 32;
+	constexpr UINT POINTS_PER_TASK = 2048;
+	UINT taskGroupCount = (m_vertexCount + POINTS_PER_TASK - 1) / POINTS_PER_TASK;
+	meshCommandList->DispatchMesh(taskGroupCount, 1, 1);
 }
 
 static Microsoft::WRL::ComPtr<ID3DBlob> CompileShaderWithDXC(
