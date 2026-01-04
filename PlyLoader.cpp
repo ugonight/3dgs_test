@@ -54,7 +54,7 @@ std::vector<Vertex> PlyLoader::Load(std::string filename)
 		// 位置
 		v.position = DirectX::XMFLOAT4(
 			basic_props.position[0],
-			-basic_props.position[1],
+			basic_props.position[1],
 			basic_props.position[2], 
 			1.0f
 		);
@@ -77,7 +77,8 @@ std::vector<Vertex> PlyLoader::Load(std::string filename)
 		// 3D共分散行列
 		{
 			DirectX::XMFLOAT3 scale = { std::exp(basic_props.scale[0]), std::exp(basic_props.scale[1]), std::exp(basic_props.scale[2]) };
-			DirectX::XMVECTOR quate_rot = { basic_props.rotation[0], basic_props.rotation[1], basic_props.rotation[2], basic_props.rotation[3] };
+			//DirectX::XMVECTOR quate_rot = { basic_props.rotation[0], basic_props.rotation[1], basic_props.rotation[2], basic_props.rotation[3] };
+			DirectX::XMVECTOR quate_rot = { basic_props.rotation[1], basic_props.rotation[2], basic_props.rotation[3], basic_props.rotation[0] };
 			quate_rot = DirectX::XMVector4Normalize(quate_rot);
 
 			// 回転行列をクォータニオンから生成し、スケール行列と掛け合わせる
@@ -88,7 +89,7 @@ std::vector<Vertex> PlyLoader::Load(std::string filename)
 			// 共分散行列 = transform^T * transform
 			auto transform_matrix_t = DirectX::XMMatrixTranspose(transform_matrix);
 			auto cov = DirectX::XMMatrixMultiply(transform_matrix_t, transform_matrix);
-			DirectX::XMStoreFloat3x3(&v.cov3d, cov);
+			DirectX::XMStoreFloat4x4(&v.cov3d, cov);
 		}
 		vertices.push_back(v);
 	}

@@ -67,10 +67,18 @@ private:
 	// DX12 用 DirectX Tool Kit を使用している場合はこの行のコメントを外してください:
 	// std::unique_ptr<DirectX::GraphicsMemory> m_graphicsMemory;
 
+	const DirectX::XMINT2 GAUSSIAN_TEXTURE_SIZE = { 128, 128 };
+	const int GAUSSIAN_TEXTURE_LOD = 7;
+
 	struct SceneConstantBuffer
 	{
-		XMFLOAT4X4 mvp;        // Model-view-projection (MVP) matrix.
-		FLOAT padding[48];
+		// XMFLOAT4X4 mvp;        // Model-view-projection (MVP) matrix.
+		XMFLOAT4X4 world_transform;
+		XMFLOAT4X4 view_transform;
+		XMFLOAT4X4 project_transform;
+		XMINT2 viewport_size;
+		XMFLOAT2 focal;
+		FLOAT padding[12];
 	};
 
 	// Pipeline objects.
@@ -87,6 +95,9 @@ private:
 	SceneConstantBuffer* m_pConstantBuffers;
 	UINT m_cbvSrvDescriptorSize;
 	SimpleCamera m_camera;
+
+	Microsoft::WRL::ComPtr<ID3D12Resource> gaussian_texture_buffer;
+	std::vector<std::vector<float>> cpu_gaussian_texture_buffer;
 
 	void LoadPipeline();
 	void LoadAssets();

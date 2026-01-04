@@ -88,10 +88,27 @@ void Game::Update(DX::StepTimer const& timer)
 		XMFLOAT4X4 mvp;
 		DirectX::XMMATRIX model = XMMatrixScaling(1, 1, 1) *
 			// 3DGS公式サンプルはなぜか30°傾いている
-			XMMatrixRotationRollPitchYaw(XMConvertToRadians(30), XMConvertToRadians(0), XMConvertToRadians(0)) *
+			XMMatrixRotationRollPitchYaw(XMConvertToRadians(-30), XMConvertToRadians(0), XMConvertToRadians(0)) *
 			XMMatrixTranslation(0, 0, 0);
-		XMStoreFloat4x4(&mvp, (model * m_camera.GetViewMatrix() * m_camera.GetProjectionMatrix(0.8f, aspectRatio, 0.1f, 1000.f)));
-		m_pConstantBuffers->mvp = mvp;
+		float fov = 0.8f;
+		//XMStoreFloat4x4(&mvp, (model * m_camera.GetViewMatrix() * m_camera.GetProjectionMatrix(fov, aspectRatio, 0.1f, 1000.f)));
+		//m_pConstantBuffers->mvp = mvp;
+
+		XMFLOAT4X4 world, view, project;
+		XMStoreFloat4x4(&world, model);
+		XMStoreFloat4x4(&view, m_camera.GetViewMatrix());
+		XMStoreFloat4x4(&project, m_camera.GetProjectionMatrix(fov, aspectRatio, 0.1f, 1000.f));
+		m_pConstantBuffers->world_transform = world;
+		m_pConstantBuffers->view_transform = view;
+		m_pConstantBuffers->project_transform = project;
+		m_pConstantBuffers->viewport_size = { m_deviceResources->GetOutputSize().right,m_deviceResources->GetOutputSize().bottom };
+
+		float half_fov_y = fov / 2;
+		float tan_half_fov_y = std::tanf(half_fov_y);
+		float tan_half_fov_x = tan_half_fov_y * aspectRatio;
+		float focal_x = m_deviceResources->GetOutputSize().right / (tan_half_fov_x * 2);
+		float focal_y = m_deviceResources->GetOutputSize().bottom / (tan_half_fov_y * 2);
+		m_pConstantBuffers->focal = { focal_x, focal_y };
 	}
 
 	PIXEndEvent();
@@ -273,7 +290,7 @@ void Game::LoadPipeline()
 	{
 		// シェーダーリソースビュー (SRV) と定数バッファビュー (CBV) 記述子ヒープを記述して作成します。
 		D3D12_DESCRIPTOR_HEAP_DESC cbvSrvHeapDesc = {};
-		cbvSrvHeapDesc.NumDescriptors = 2;
+		cbvSrvHeapDesc.NumDescriptors = 3;
 		cbvSrvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 		cbvSrvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
 		DX::ThrowIfFailed(device->CreateDescriptorHeap(&cbvSrvHeapDesc, IID_PPV_ARGS(&m_cbvSrvHeap)));
@@ -298,15 +315,30 @@ void Game::LoadAssets()
 			featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_0;
 		}
 
+		D3D12_STATIC_SAMPLER_DESC sampler = CD3DX12_STATIC_SAMPLER_DESC();
+		sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+		sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+		sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+		sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_BORDER;
+		sampler.MipLODBias = 0;
+		sampler.MaxAnisotropy = 0;
+		sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+		sampler.BorderColor = D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;
+		sampler.MinLOD = 0.0f;
+		sampler.MaxLOD = GAUSSIAN_TEXTURE_LOD;
+		sampler.ShaderRegister = 0;
+		sampler.RegisterSpace = 0;
+		sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+
 		CD3DX12_DESCRIPTOR_RANGE1 ranges[2];
 		ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
-		ranges[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
+		ranges[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
 		CD3DX12_ROOT_PARAMETER1 rootParameters[2];
 		rootParameters[0].InitAsDescriptorTable(1, &ranges[0], D3D12_SHADER_VISIBILITY_ALL);
 		rootParameters[1].InitAsDescriptorTable(1, &ranges[1], D3D12_SHADER_VISIBILITY_ALL);
 
 		CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc;
-		rootSignatureDesc.Init_1_1(_countof(rootParameters), rootParameters, 0, nullptr, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+		rootSignatureDesc.Init_1_1(_countof(rootParameters), rootParameters, 1, &sampler, D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 		ComPtr<ID3DBlob> signature;
 		ComPtr<ID3DBlob> error;
@@ -316,9 +348,6 @@ void Game::LoadAssets()
 
 	// パイプラインステートを作成します（シェーダーのコンパイルと読み込みを含む）。
 	{
-		//ComPtr<ID3DBlob> vertexShader;
-		//ComPtr<ID3DBlob> pixelShader;
-
 #if defined(_DEBUG)
 		// グラフィックスデバッグツールでシェーダーデバッグを強化します。
 		UINT compileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
@@ -333,6 +362,25 @@ void Game::LoadAssets()
 		CD3DX12_RASTERIZER_DESC rasterizerStateDesc(D3D12_DEFAULT);
 		rasterizerStateDesc.CullMode = D3D12_CULL_MODE_NONE;
 
+		D3D12_BLEND_DESC blend_desc = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+		blend_desc.RenderTarget[0].BlendEnable = true;
+		blend_desc.RenderTarget[0].LogicOpEnable = FALSE;
+		blend_desc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+		blend_desc.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+		blend_desc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+		blend_desc.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+		blend_desc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+		blend_desc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
+		blend_desc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+		blend_desc.RenderTarget[0].LogicOp = D3D12_LOGIC_OP_NOOP;
+
+		//depth:disable Depth Wirte & enable Depth Test
+		D3D12_DEPTH_STENCIL_DESC depth_stencil_desc;
+		depth_stencil_desc.DepthEnable = true;
+		depth_stencil_desc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+		depth_stencil_desc.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
+		depth_stencil_desc.StencilEnable = false;
+
 		D3DX12_MESH_SHADER_PIPELINE_STATE_DESC psoDesc = {};
 		psoDesc.pRootSignature = m_rootSignature.Get();
 		psoDesc.AS = CD3DX12_SHADER_BYTECODE(taskShader.Get());
@@ -342,8 +390,8 @@ void Game::LoadAssets()
 		psoDesc.RTVFormats[0] = m_deviceResources->GetBackBufferFormat();
 		psoDesc.DSVFormat = m_deviceResources->GetDepthBufferFormat();
 		psoDesc.RasterizerState = rasterizerStateDesc;
-		psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);             // 不透明ブレンド
-		psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT); // 深度テスト有効、ステンシル無効
+		psoDesc.BlendState = blend_desc;
+		psoDesc.DepthStencilState = depth_stencil_desc;
 		psoDesc.SampleMask = UINT_MAX;
 		psoDesc.SampleDesc = DefaultSampleDesc();
 		psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
@@ -397,7 +445,9 @@ void Game::LoadAssets()
 
 	// 頂点バッファ（SRV）
 	{
-		std::vector<Vertex> vertices = PlyLoader::Load("D:/Downloads/models/garden/point_cloud/iteration_7000/point_cloud.ply");
+		std::vector<Vertex> vertices = PlyLoader::Load("D:/Downloads/models/garden/point_cloud/iteration_7000/point_cloud_reduced.ply");
+		//std::vector<Vertex> vertices = PlyLoader::Load("simple_3dgs.ply");
+		//std::vector<Vertex> vertices = PlyLoader::Load("sample.ply");
 		m_vertexCount = vertices.size();
 		const UINT vertexBufferSize = static_cast<UINT>(sizeof(Vertex) * vertices.size());
 
@@ -440,6 +490,88 @@ void Game::LoadAssets()
 		srvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 		srvDesc.Format = DXGI_FORMAT_UNKNOWN; // StructuredBuffer の場合は UNKNOWN
 		device->CreateShaderResourceView(m_vertexBuffer.Get(), &srvDesc, cbvSrvHandle);
+	}
+
+	cbvSrvHandle.ptr += m_cbvSrvDescriptorSize;
+
+	Microsoft::WRL::ComPtr<ID3D12Resource> gaussian_texture_upload_buffer;
+	{
+		{
+			auto gaussian_texture_desc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R32_FLOAT, GAUSSIAN_TEXTURE_SIZE.x, GAUSSIAN_TEXTURE_SIZE.y, 1, GAUSSIAN_TEXTURE_LOD, 1, 0);
+			auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+			DX::ThrowIfFailed(device->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAG_NONE, &gaussian_texture_desc,
+				D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&gaussian_texture_buffer)));
+		}
+		{
+			const UINT64 uploadBufferSize = GetRequiredIntermediateSize(gaussian_texture_buffer.Get(), 0, GAUSSIAN_TEXTURE_LOD);
+			auto heapProperties = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+			auto buffer = CD3DX12_RESOURCE_DESC::Buffer(uploadBufferSize);
+			DX::ThrowIfFailed(device->CreateCommittedResource(&heapProperties, D3D12_HEAP_FLAG_NONE,
+				&buffer, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&gaussian_texture_upload_buffer)));
+		}
+
+		//init srv: gaussian texture
+		D3D12_SHADER_RESOURCE_VIEW_DESC gaussian_texture_srv_desc;
+		gaussian_texture_srv_desc.Format = DXGI_FORMAT_R32_FLOAT;
+		gaussian_texture_srv_desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		gaussian_texture_srv_desc.Texture2D.MipLevels = GAUSSIAN_TEXTURE_LOD;
+		gaussian_texture_srv_desc.Texture2D.PlaneSlice = 0;
+		gaussian_texture_srv_desc.Texture2D.MostDetailedMip = 0;
+		gaussian_texture_srv_desc.Texture2D.ResourceMinLODClamp = 0;
+		gaussian_texture_srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		device->CreateShaderResourceView(gaussian_texture_buffer.Get(), &gaussian_texture_srv_desc, cbvSrvHandle);
+
+		//init cpu data
+		cpu_gaussian_texture_buffer.resize(GAUSSIAN_TEXTURE_LOD);
+		cpu_gaussian_texture_buffer[0].resize(GAUSSIAN_TEXTURE_SIZE.x * GAUSSIAN_TEXTURE_SIZE.y);
+		{
+			auto& cpu_texture = cpu_gaussian_texture_buffer[0];
+			float mean_x = GAUSSIAN_TEXTURE_SIZE.x / 2;
+			float mean_y = GAUSSIAN_TEXTURE_SIZE.y / 2;
+			float axis_x = mean_x - 0.5f;
+			float axis_y = mean_y - 0.5f;
+			float cov_inv_00 = 2 * std::log(255) / (axis_x * axis_x);
+			float cov_inv_11 = 2 * std::log(255) / (axis_y * axis_y);
+			for (int x = 0; x < GAUSSIAN_TEXTURE_SIZE.x; x++)
+			{
+				for (int y = 0; y < GAUSSIAN_TEXTURE_SIZE.y; y++)
+				{
+					float delta_x = x + 0.5f - mean_x;
+					float delta_y = y + 0.5f - mean_y;
+					cpu_texture[y * GAUSSIAN_TEXTURE_SIZE.x + x] = std::exp(-0.5 * (cov_inv_00 * delta_x * delta_x + cov_inv_11 * delta_y * delta_y));
+				}
+			}
+		}
+		for (int lod = 1; lod < GAUSSIAN_TEXTURE_LOD; lod++)
+		{
+			int cur_lod_size_x = (GAUSSIAN_TEXTURE_SIZE.x >> lod);
+			int cur_lod_size_y = (GAUSSIAN_TEXTURE_SIZE.y >> lod);
+			cpu_gaussian_texture_buffer[lod].resize(cur_lod_size_x * cur_lod_size_y);
+			for (int x = 0; x < cur_lod_size_x; x++)
+			{
+				for (int y = 0; y < cur_lod_size_y; y++)
+				{
+					float value = cpu_gaussian_texture_buffer[lod - 1][(y * 2) * (cur_lod_size_x * 2) + (x * 2)];
+					value += cpu_gaussian_texture_buffer[lod - 1][(y * 2 + 1) * (cur_lod_size_x * 2) + (x * 2)];
+					value += cpu_gaussian_texture_buffer[lod - 1][(y * 2) * (cur_lod_size_x * 2) + (x * 2 + 1)];
+					value += cpu_gaussian_texture_buffer[lod - 1][(y * 2 + 1) * (cur_lod_size_x * 2) + (x * 2 + 1)];
+					cpu_gaussian_texture_buffer[lod][y * cur_lod_size_x + x] = value / 4.0f;
+				}
+			}
+		}
+
+		std::vector<D3D12_SUBRESOURCE_DATA> texture_lod_data;
+		texture_lod_data.resize(GAUSSIAN_TEXTURE_LOD);
+		for (int i = 0; i < GAUSSIAN_TEXTURE_LOD; i++)
+		{
+			texture_lod_data[i].pData = cpu_gaussian_texture_buffer[i].data();
+			texture_lod_data[i].RowPitch = (GAUSSIAN_TEXTURE_SIZE.x >> i) * sizeof(float);
+			texture_lod_data[i].SlicePitch = cpu_gaussian_texture_buffer[i].size() * sizeof(float);
+		}
+
+		auto resourceBarrier = CD3DX12_RESOURCE_BARRIER::Transition(gaussian_texture_buffer.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE);
+		UpdateSubresources(commandList, gaussian_texture_buffer.Get(), gaussian_texture_upload_buffer.Get(), 0, 0, GAUSSIAN_TEXTURE_LOD, texture_lod_data.data());
+		commandList->ResourceBarrier(1, &resourceBarrier);
 	}
 
 	DX::ThrowIfFailed(commandList->Close());
